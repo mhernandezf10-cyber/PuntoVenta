@@ -1,0 +1,44 @@
+@ApiCliente_HostAddress = http://localhost:5228
+
+GET {{ApiCliente_HostAddress}}/api/clientes
+Accept: application/json
+
+###
+
+GET {{ApiCliente_HostAddress}}/api/clientes/1
+Accept: application/json
+
+###
+
+POST {{ApiCliente_HostAddress}}/api/clientes
+Content-Type: application/json
+
+{
+  "cui": "1234567890101",
+  "nit": "1234567-8",
+  "nombres": "Ana",
+  "apellidos": "Perez",
+  "direccion": "Ciudad de Guatemala",
+  "telefono": "55551234",
+  "fecha_Nacimiento": "2000-05-10T00:00:00"
+}
+
+###
+
+PUT {{ApiCliente_HostAddress}}/api/clientes/1
+Content-Type: application/json
+
+{
+  "id_cliente": 1,
+  "cui": "1234567890101",
+  "nit": "1234567-8",
+  "nombres": "Ana Maria",
+  "apellidos": "Perez",
+  "direccion": "Zona 1, Guatemala",
+  "telefono": "55551234",
+  "fecha_Nacimiento": "2000-05-10T00:00:00"
+}
+
+###
+
+DELETE {{ApiCliente_HostAddress}}/api/clientes/2
