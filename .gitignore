@@ -1,7 +1,0 @@
-
-**/bin/
-**/obj/
-**/appsettings.json
-**/appsettings.*.json
-**/*.user
-.vs/
