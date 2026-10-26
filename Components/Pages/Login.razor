@@ -1,0 +1,295 @@
+@page "/login"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>Iniciar sesión | ARES TECH</PageTitle>
+
+<div class="login-fondo">
+    <div class="login-panel">
+
+        <div class="login-logo">
+            <h1>ARES TECH</h1>
+            <p>El fin de las amenazas. El inicio del control.</p>
+        </div>
+
+        <h2>Iniciar sesión</h2>
+
+        <p class="login-subtitulo">
+            Ingresa tus credenciales para continuar
+        </p>
+
+        <EditForm Model="@formulario"
+                  OnValidSubmit="@IniciarSesion">
+
+            <DataAnnotationsValidator />
+
+            <div class="login-campo">
+                <label for="usuario">Usuario</label>
+
+                <InputText id="usuario"
+                           class="login-input"
+                           @bind-Value="formulario.Nombre_usuario"
+                           autocomplete="username"
+                           placeholder="Ingresa tu usuario" />
+
+                <ValidationMessage
+                    For="@(() => formulario.Nombre_usuario)" />
+            </div>
+
+            <div class="login-campo">
+                <label for="password">Contraseña</label>
+
+                <InputText id="password"
+                           type="password"
+                           class="login-input"
+                           @bind-Value="formulario.Password"
+                           autocomplete="current-password"
+                           placeholder="Ingresa tu contraseña" />
+
+                <ValidationMessage
+                    For="@(() => formulario.Password)" />
+            </div>
+
+            <button class="login-boton"
+                    type="submit"
+                    disabled="@cargando">
+
+                @(cargando ? "VERIFICANDO..." : "ENTRAR")
+
+            </button>
+        </EditForm>
+
+        @if (!string.IsNullOrWhiteSpace(mensaje))
+        {
+            <p class="login-error" role="alert">
+                @mensaje
+            </p>
+        }
+
+        <p class="login-pie">
+            Acceso protegido · ARES TECH
+        </p>
+    </div>
+</div>
+
+<style>
+    .login-fondo {
+        min-height: 100vh;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 24px;
+        background:
+            linear-gradient(
+                120deg,
+                rgba(0, 0, 0, .78),
+                rgba(15, 0, 0, .48)
+            ),
+            url("/images/ares-fondo.jpg") center / cover no-repeat;
+    }
+
+    .login-panel {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 430px;
+        padding: 36px;
+        border: 1px solid rgba(255, 50, 50, .65);
+        border-radius: 18px;
+        background: rgba(12, 12, 15, .94);
+        box-shadow: 0 0 35px rgba(255, 0, 0, .22);
+        color: #fff;
+        animation: aparecer .7s ease-out;
+    }
+
+    .login-logo {
+        text-align: center;
+        margin-bottom: 28px;
+    }
+
+    .login-logo h1 {
+        color: #ff3030;
+        letter-spacing: 5px;
+        font-weight: 800;
+        margin: 0 0 8px;
+    }
+
+    .login-logo p,
+    .login-subtitulo,
+    .login-pie {
+        color: #c4c4c4;
+        font-size: .88rem;
+    }
+
+    .login-panel h2 {
+        text-align: center;
+        margin-bottom: 8px;
+    }
+
+    .login-subtitulo {
+        text-align: center;
+        margin-bottom: 24px;
+    }
+
+    .login-campo {
+        margin-bottom: 18px;
+    }
+
+    .login-panel label {
+        display: block;
+        margin-bottom: 7px;
+        font-weight: 600;
+    }
+
+    .login-input {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        padding: 12px;
+        color: #fff;
+        background: #1d1d22;
+        border: 1px solid #484848;
+        border-radius: 8px;
+        outline: none;
+    }
+
+    .login-input:focus {
+        border-color: #ff3030;
+        box-shadow: 0 0 8px rgba(255, 48, 48, .3);
+    }
+
+    .login-boton {
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 8px;
+        padding: 13px;
+        color: #fff;
+        font-weight: 800;
+        letter-spacing: 2px;
+        background: #c91420;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .login-boton:hover {
+        background: #f02030;
+    }
+
+    .login-boton:disabled {
+        opacity: .65;
+        cursor: wait;
+    }
+
+    .login-error {
+        margin-top: 18px;
+        color: #ff7777;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    .validation-message {
+        display: block;
+        margin-top: 5px;
+        color: #ff7777;
+        font-size: .85rem;
+    }
+
+    .login-pie {
+        text-align: center;
+        margin: 25px 0 0;
+    }
+
+    @@keyframes aparecer {
+        from {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .login-fondo {
+            padding: 16px;
+        }
+
+        .login-panel {
+            padding: 25px 20px;
+        }
+    }
+</style>
+
+@code {
+    private LoginFormulario formulario = new();
+    private bool cargando;
+    private string mensaje = string.Empty;
+
+    private async Task IniciarSesion()
+    {
+        if (cargando)
+            return;
+
+        cargando = true;
+        mensaje = string.Empty;
+
+        try
+        {
+            var resultado = await JS.InvokeAsync<ResultadoLogin>(
+                "aresSession.iniciarSesion",
+                formulario.Nombre_usuario.Trim(),
+                formulario.Password
+            );
+
+            if (!resultado.Correcto)
+            {
+                mensaje = resultado.Estado == 0
+                    ? resultado.Mensaje
+                    : $"Error HTTP {resultado.Estado}: {resultado.Mensaje}";
+
+                return;
+            }
+
+            // La cookie ya fue recibida por el navegador.
+            // Recargar permite que ASP.NET Core lea la sesión.
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        catch (JSException)
+        {
+            mensaje = "No se pudo ejecutar el inicio de sesión. " +
+                      "Comprueba que session.js esté cargado.";
+        }
+        catch (Exception ex)
+        {
+            mensaje = $"Error al iniciar sesión: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private sealed class LoginFormulario
+    {
+        [Required(ErrorMessage = "Ingrese el usuario.")]
+        public string Nombre_usuario { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Ingrese la contraseña.")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public sealed class ResultadoLogin
+    {
+        public bool Correcto { get; set; }
+        public int Estado { get; set; }
+        public string Mensaje { get; set; } = string.Empty;
+    }
+}

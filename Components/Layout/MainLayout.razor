@@ -1,0 +1,35 @@
+﻿
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+@if (Navigation.ToBaseRelativePath(Navigation.Uri)
+    .Split('?')[0]
+    .TrimEnd('/')
+    .Equals("login", StringComparison.OrdinalIgnoreCase))
+{
+    @Body
+}
+else
+{
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
+        </div>
+
+        <main>
+            <div class="top-row px-4">
+                <span>ARES TECH</span>
+            </div>
+
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    Se ha producido un error no controlado.
+    <a href="." class="reload">Recargar</a>
+    <span class="dismiss">×</span>
+</div>

@@ -1,0 +1,471 @@
+
+@page "/ventas"
+@rendermode InteractiveServer
+
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Microsoft.JSInterop
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JS
+
+<PageTitle>Ventas | ARES TECH</PageTitle>
+
+<h3>Módulo de ventas</h3>
+
+@if (!string.IsNullOrWhiteSpace(mensaje))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success")">
+        @mensaje
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header">Registrar venta</div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Cliente</label>
+            <select class="form-select" @bind="idCliente">
+                <option value="0">Seleccione un cliente</option>
+                @foreach (var cliente in clientes)
+                {
+                    <option value="@cliente.Id_clientes">
+                        @cliente.Nombres @cliente.Apellidos
+                    </option>
+                }
+            </select>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-5">
+                <label class="form-label">Producto</label>
+                <select class="form-select" @bind="idProducto">
+                    <option value="0">Seleccione un producto</option>
+                    @foreach (var producto in productos)
+                    {
+                        <option value="@producto.Id_producto">
+                            @producto.Nombre — Q @producto.Precio.ToString("N2")
+                            (Existencia: @producto.Existencia)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Cantidad</label>
+                <input class="form-control"
+                       type="number"
+                       min="1"
+                       @bind="cantidad" />
+            </div>
+
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="button"
+                        class="btn btn-secondary"
+                        @onclick="AgregarProducto">
+                    Agregar producto
+                </button>
+            </div>
+        </div>
+
+        <h5>Detalle de la venta</h5>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Producto</th>
+                        <th>Precio</th>
+                        <th>Cantidad</th>
+                        <th>Subtotal</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var detalle in detallesNuevos)
+                    {
+                        <tr>
+                            <td>@detalle.Nombre</td>
+                            <td>Q @detalle.Precio.ToString("N2")</td>
+                            <td>@detalle.Cantidad</td>
+                            <td>
+                                Q @((detalle.Precio * detalle.Cantidad).ToString("N2"))
+                            </td>
+                            <td>
+                                <button type="button"
+                                        class="btn btn-danger btn-sm"
+                                        @onclick="() => QuitarProducto(detalle.Id_producto)">
+                                    Quitar
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="3" class="text-end">TOTAL</th>
+                        <th colspan="2">Q @Total.ToString("N2")</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <button type="button"
+                class="btn btn-primary"
+                @onclick="RegistrarVenta"
+                disabled="@guardando">
+            @(guardando ? "Guardando..." : "Registrar venta")
+        </button>
+
+        <button type="button"
+                class="btn btn-secondary ms-2"
+                @onclick="Limpiar"
+                disabled="@guardando">
+            Limpiar
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Ventas registradas</div>
+    <div class="card-body">
+        <button type="button"
+                class="btn btn-outline-primary mb-3"
+                @onclick="CargarDatos">
+            Actualizar listado
+        </button>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Fecha</th>
+                        <th>ID cliente</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (ventas.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center">
+                                No hay ventas registradas.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var venta in ventas)
+                        {
+                            <tr @key="venta.Id_venta">
+                                <td>@venta.Id_venta</td>
+                                <td>@venta.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>@venta.Id_cliente</td>
+                                <td>Q @venta.Total.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly JsonSerializerOptions opcionesJson =
+        new() { PropertyNameCaseInsensitive = true };
+
+    private List<ClienteDto> clientes = new();
+    private List<ProductoDto> productos = new();
+    private List<VentaDto> ventas = new();
+    private List<DetalleNuevo> detallesNuevos = new();
+
+    private uint idCliente;
+    private int idProducto;
+    private int cantidad = 1;
+    private bool guardando;
+    private bool esError;
+    private string mensaje = "";
+
+    private decimal Total =>
+        detallesNuevos.Sum(d => d.Precio * d.Cantidad);
+
+    private HttpClient Api =>
+        HttpClientFactory.CreateClient("ApiEmpresa");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        try
+        {
+            clientes = await Api.GetFromJsonAsync<List<ClienteDto>>(
+                "api/Clientes", opcionesJson) ?? new();
+
+            productos = await Api.GetFromJsonAsync<List<ProductoDto>>(
+                "api/Productos", opcionesJson) ?? new();
+
+            ventas = await Api.GetFromJsonAsync<List<VentaDto>>(
+                "api/Ventas", opcionesJson) ?? new();
+
+            mensaje = "";
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje("Error al cargar datos: " + ex.Message, true);
+        }
+    }
+
+    private void AgregarProducto()
+    {
+        var producto = productos.FirstOrDefault(
+            p => p.Id_producto == idProducto);
+
+        if (producto == null)
+        {
+            MostrarMensaje("Seleccione un producto válido.", true);
+            return;
+        }
+
+        if (cantidad <= 0)
+        {
+            MostrarMensaje("La cantidad debe ser mayor que cero.", true);
+            return;
+        }
+
+        var existente = detallesNuevos.FirstOrDefault(
+            d => d.Id_producto == idProducto);
+
+        int cantidadAcumulada = cantidad +
+            (existente?.Cantidad ?? 0);
+
+        if (cantidadAcumulada > producto.Existencia)
+        {
+            MostrarMensaje(
+                $"Existencia insuficiente de {producto.Nombre}. " +
+                $"Disponible: {producto.Existencia}.", true);
+            return;
+        }
+
+        if (existente != null)
+        {
+            existente.Cantidad += cantidad;
+        }
+        else
+        {
+            detallesNuevos.Add(new DetalleNuevo
+            {
+                Id_producto = producto.Id_producto,
+                Nombre = producto.Nombre,
+                Precio = producto.Precio,
+                Cantidad = cantidad
+            });
+        }
+
+        idProducto = 0;
+        cantidad = 1;
+        MostrarMensaje("Producto agregado al detalle.", false);
+    }
+
+    private void QuitarProducto(int id)
+    {
+        detallesNuevos.RemoveAll(d => d.Id_producto == id);
+    }
+
+    private async Task RegistrarVenta()
+    {
+        if (guardando)
+            return;
+
+        if (idCliente == 0)
+        {
+            MostrarMensaje("Seleccione un cliente.", true);
+            return;
+        }
+
+        if (detallesNuevos.Count == 0)
+        {
+            MostrarMensaje("Agregue al menos un producto.", true);
+            return;
+        }
+
+        var clienteSeleccionado = clientes.FirstOrDefault(
+            c => c.Id_clientes == idCliente);
+
+        if (clienteSeleccionado == null)
+        {
+            MostrarMensaje("El cliente seleccionado no existe.", true);
+            return;
+        }
+
+        // Conservamos los datos antes de limpiar el formulario.
+        var detallesFactura = detallesNuevos
+            .Select(d => new DetalleNuevo
+            {
+                Id_producto = d.Id_producto,
+                Nombre = d.Nombre,
+                Precio = d.Precio,
+                Cantidad = d.Cantidad
+            })
+            .ToList();
+
+        var totalFactura = detallesFactura.Sum(
+            d => d.Precio * d.Cantidad);
+
+        var clienteIdFactura = idCliente;
+        var fechaFactura = DateTime.Now;
+
+        // El ID máximo anterior sirve para identificar la nueva venta
+        // después de actualizar el listado.
+        var ultimoIdAnterior = ventas.Count == 0
+            ? 0
+            : ventas.Max(v => v.Id_venta);
+
+        guardando = true;
+
+        try
+        {
+            var solicitud = new
+            {
+                Id_cliente = idCliente,
+                Detalles = detallesNuevos.Select(d => new
+                {
+                    d.Id_producto,
+                    d.Cantidad
+                }).ToList()
+            };
+
+            using var respuesta = await Api.PostAsJsonAsync(
+                "api/Ventas", solicitud);
+
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                var detalleError =
+                    await respuesta.Content.ReadAsStringAsync();
+
+                MostrarMensaje(
+                    $"No se pudo registrar la venta " +
+                    $"(HTTP {(int)respuesta.StatusCode}): {detalleError}",
+                    true);
+                return;
+            }
+
+            // Actualiza los datos sin perder la copia de la factura.
+            await CargarDatos();
+
+            var ventaCreada = ventas
+                .Where(v => v.Id_venta > ultimoIdAnterior)
+                .Where(v => v.Id_cliente == clienteIdFactura)
+                .OrderByDescending(v => v.Id_venta)
+                .FirstOrDefault();
+
+            Limpiar();
+
+            if (ventaCreada == null)
+            {
+                MostrarMensaje(
+                    "La venta se registró, pero no se pudo identificar " +
+                    "su número para generar la factura. Actualice el listado.",
+                    true);
+                return;
+            }
+
+            var nombreCliente =
+                $"{clienteSeleccionado.Nombres} {clienteSeleccionado.Apellidos}".Trim();
+
+            var factura = new
+            {
+                numero = $"VENT-{ventaCreada.Id_venta:D6}",
+                fecha = ventaCreada.Fecha == default
+                    ? fechaFactura.ToString("dd/MM/yyyy HH:mm")
+                    : ventaCreada.Fecha.ToString("dd/MM/yyyy HH:mm"),
+                cliente = string.IsNullOrWhiteSpace(nombreCliente)
+                    ? $"Cliente {clienteIdFactura}"
+                    : nombreCliente,
+                items = detallesFactura.Select(d => new
+                {
+                    producto = d.Nombre,
+                    cantidad = d.Cantidad,
+                    precio = d.Precio,
+                    subtotal = d.Precio * d.Cantidad
+                }).ToList(),
+                total = totalFactura
+            };
+
+            await JS.InvokeVoidAsync(
+                "aresFacturas.imprimirVenta", factura);
+
+            MostrarMensaje(
+                $"Venta #{ventaCreada.Id_venta} registrada. " +
+                "Se abrió la factura para imprimirla o guardarla como PDF.",
+                false);
+        }
+        catch (JSException ex)
+        {
+            MostrarMensaje(
+                "La venta pudo registrarse, pero no se pudo abrir la factura. " +
+                "Revise que facturas.js contenga la función imprimirVenta. " +
+                ex.Message,
+                true);
+        }
+        catch (Exception ex)
+        {
+            MostrarMensaje(
+                "Error al registrar o generar la factura: " + ex.Message,
+                true);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Limpiar()
+    {
+        idCliente = 0;
+        idProducto = 0;
+        cantidad = 1;
+        detallesNuevos.Clear();
+        mensaje = "";
+    }
+
+    private void MostrarMensaje(string texto, bool error)
+    {
+        mensaje = texto;
+        esError = error;
+    }
+
+    public class ClienteDto
+    {
+        public uint Id_clientes { get; set; }
+        public string? Nombres { get; set; }
+        public string? Apellidos { get; set; }
+    }
+
+    public class ProductoDto
+    {
+        public int Id_producto { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Precio { get; set; }
+        public int Existencia { get; set; }
+    }
+
+    public class VentaDto
+    {
+        public int Id_venta { get; set; }
+        public DateTime Fecha { get; set; }
+        public uint Id_cliente { get; set; }
+        public decimal Total { get; set; }
+    }
+
+    public class DetalleNuevo
+    {
+        public int Id_producto { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Precio { get; set; }
+        public int Cantidad { get; set; }
+    }
+}
